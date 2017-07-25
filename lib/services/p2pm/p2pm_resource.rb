@@ -1,4 +1,4 @@
-class TFSResource < GenericResource
+class P2PMResource < GenericResource
 
   API_VERSION = "1.0"
 
@@ -17,16 +17,39 @@ class TFSResource < GenericResource
     @@default_http_options
   end
 
-  def process_response(response, *success_codes, &block)
-    success_codes = [200] if success_codes == []
-    if success_codes.include?(response.status)
+def process_RestClient_response(response, *success_codes, &block)
+    success_codes = [200, 201] if success_codes == []
+    if success_codes.include?(response.code)
       if block_given?
         yield hashie_or_array_of_hashies(response.body)
       else
         return hashie_or_array_of_hashies(response.body)
       end
+    elsif response.code == 404
+      msg = parse(response.body)
+      raise AhaService::RemoteError, "Remote resource was not found: #{msg['message']}"
+    elsif response.code == 400
+      msg = parse(response.body)
+      raise AhaService::RemoteError, "The request was not valid: #{msg['message']}"
+    elsif [403, 401].include?(response.code)
+      raise_config_error "The API key is invalid or has insufficent rights."
+    else
+      raise AhaService::RemoteError, "Unhandled error: STATUS=#{response.code} BODY=#{response.body}"
+    end
+  end
+
+  def process_response(response, *success_codes, &block)
+    success_codes = [200] if success_codes == []
+    if success_codes.include?(response.status)
+      if block_given?
+        #yield hashie_or_array_of_hashies(response.body)
+        yield response.body
+      else
+        #return hashie_or_array_of_hashies(response.body)
+        return response.body
+      end
     elsif response.status == 302
-      raise_config_error "Authentication denied. If you are using VSO you must use the alternate credentials rather than your login credentials."
+      raise_config_error "Authentication denied. Invalid credentials."
     elsif response.status == 404
       raise AhaService::RemoteError, "Remote resource was not found."
     elsif response.status == 400
@@ -37,6 +60,35 @@ class TFSResource < GenericResource
     else
       raise AhaService::RemoteError, "Unhandled error: STATUS=#{response.status} BODY=#{response.body}"
     end
+  end
+ 
+  def get_security_token
+    body = {
+      'grant_type' => "password",
+      'scope' => "*",
+      'client_id' => @service.data.client_id,
+      'client_secret' => @service.data.client_secret,
+      'username' => @service.data.user_name,
+      'password' => @service.data.user_password
+    }
+    logger.debug "URL: #{@service.data.server_url}\n"
+    logger.debug "Body: #{body}\n"
+    response = RestClient.post @service.data.server_url, body.to_json, {content_type: :json, accept: :json} { |response, request, result, &block|
+      case response.code
+        when 200
+          #p "It worked !"
+          response
+        when 423
+          raise SomeCustomExceptionIfYouWant
+        else
+          response.return!(&block)
+      end
+    }
+    #puts response
+    parsed = JSON.parse(response)
+    security_token = parsed['access_token']
+    #logger.debug "PR access_token = #{security_token}"
+    security_token
   end
   
   def create_attachments(workitem, aha_attachments)
@@ -75,15 +127,14 @@ protected
     if @service.class.service_name == "tfs_on_premise"
       @service.data.server_url
     else
-    #  "https://#{@service.data.account_name}.visualstudio.com/defaultcollection"
-      @service.data.server_url
+      "https://#{@service.data.account_name}.visualstudio.com/defaultcollection"
     end
   end
   
 end
 
 
-class TfsNtlm < Faraday::Middleware
+class P2PMNtlm < Faraday::Middleware
 
   def initialize(app, service, username, password)
     super app
@@ -112,6 +163,7 @@ class TfsNtlm < Faraday::Middleware
     end
     
     env_without_body[:request_headers]['Authorization'] = 'NTLM ' + ntlm_message_type1.encode64
+    
     @app.call(env_without_body)
   end
   
@@ -124,4 +176,4 @@ class TfsNtlm < Faraday::Middleware
   end
 end
 
-Faraday::Request.register_middleware :tfs_ntlm => lambda { TfsNtlm }
+Faraday::Request.register_middleware :p2pm_ntlm => lambda { P2PMNtlm }

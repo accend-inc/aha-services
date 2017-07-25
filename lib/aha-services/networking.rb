@@ -65,8 +65,8 @@ module Networking
   # Yields a Faraday::Request instance.
   # Returns a Faraday::Response instance.
   def http_get(url = nil, params = nil, headers = nil)
-    @logger.debug("Sending GET request to #{url}")
-    
+    #@logger.debug("Sending GET request to #{url}")
+    @logger.debug("Sending request to #{url} with headers: #{headers}")
     check_ssl do
       http.get do |req|
         req.url(verify_url(url))    if url
@@ -154,6 +154,9 @@ module Networking
     block = Proc.new if block_given?
     
     @logger.debug("Sending #{method} request to #{url} with body: #{body} and headers: #{headers}")
+    puts url
+    puts headers
+    puts body
     
     check_ssl do
       http.send(method) do |req|

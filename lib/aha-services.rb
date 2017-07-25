@@ -17,6 +17,7 @@ require 'ipaddr'
 require 'socket'
 require 'hashie'
 require 'aha-api'
+require 'rest-client'
 
 require 'aha-services/version'
 require 'aha-services/networking'
@@ -44,6 +45,9 @@ require 'services/tfs/tfs_resource'
 require 'services/rally/webhook'
 require 'services/rally/rally_resource'
 require 'services/bugzilla/bugzilla_resource'
+
+require 'services/p2pm/p2pm_common'
+require 'services/p2pm/p2pm_resource'
 
 require 'services/redmine/redmine_resource'
 require 'services/redmine/redmine_upload_resource'
